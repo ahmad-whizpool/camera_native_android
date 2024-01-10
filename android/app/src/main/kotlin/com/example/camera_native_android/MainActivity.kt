@@ -1,10 +1,8 @@
 package com.example.camera_native_android
 
 import CameraManager
-import CameraViewController
 import CameraViewFactory
 import android.os.Build
-import android.util.DisplayMetrics
 import android.view.LayoutInflater
 import android.view.View
 import androidx.annotation.RequiresApi

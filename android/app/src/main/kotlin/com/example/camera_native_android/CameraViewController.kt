@@ -1,11 +1,22 @@
+package com.example.camera_native_android
+
 import android.annotation.SuppressLint
+import android.content.ContentValues
+import android.content.ContentValues.TAG
 import android.content.Context
+import android.graphics.Camera
 import android.os.Build
-import androidx.annotation.RequiresApi
-import androidx.camera.core.*
+import android.provider.MediaStore
+import android.util.Log
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageCapture
+import androidx.camera.core.MirrorMode.MIRROR_MODE_ON_FRONT_ONLY
+import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.video.*
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
+import androidx.core.content.PermissionChecker
 import androidx.lifecycle.LifecycleOwner
 import com.google.common.util.concurrent.ListenableFuture
 
@@ -17,76 +28,74 @@ class CameraViewController(
 ) {
 
     private var imageCapture: ImageCapture? = null
-    private var videoCapture: VideoCapture? = null
+    private var videoCapture: VideoCapture<Recorder>? = null
+    private var recording: Recording? = null
     private val cameraPreview: PreviewView = camera
     private var cameraDevice: Camera? = null
     private var isInitialized = false
+    private  var videoFilePath:String=""
     private var currentLensFacing: CameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+    private var videoQuality : Quality= Quality.HIGHEST
+
 
 
     /**
      * To start camera preview and capture
      */
-    @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
-    @SuppressLint("MissingPermission", "RestrictedApi")
-    fun startCamera(onInitialize: (result: Boolean?) -> Unit) {
-        val cameraProviderFuture: ListenableFuture<ProcessCameraProvider> =
-            ProcessCameraProvider.getInstance(context.applicationContext)
-        try {
+    lateinit var cameraProviderFuture: ListenableFuture<ProcessCameraProvider>
+    lateinit var cameraProvider: ProcessCameraProvider
+    lateinit var preview: Preview
+    @SuppressLint("RestrictedApi")
+    fun startCamera(quality:Int?) {
 
-            //Init imageCapture
-            imageCapture = ImageCapture.Builder().apply {
-                setTargetAspectRatio(AspectRatio.RATIO_16_9)
-                setCameraSelector(currentLensFacing)
-            }.build()
+        if(quality !=null){
+        videoQuality = when (quality) {
+            1 -> Quality.LOWEST
+            2 -> Quality.SD
+            3 -> Quality.HD
+            4 -> Quality.FHD
+            5 -> Quality.UHD
+            6 -> Quality.HIGHEST
+            else -> Quality.HIGHEST
+        } }
+        cameraProviderFuture = ProcessCameraProvider.getInstance(this.context)
 
-            videoCapture = VideoCapture.Builder().apply {
-                setTargetAspectRatio(AspectRatio.RATIO_16_9)
-                setVideoFrameRate(30)
-                setCameraSelector(currentLensFacing)
-            }.build()
+        cameraProviderFuture.addListener({
+            // Used to bind the lifecycle of cameras to the lifecycle owner
+            cameraProvider = cameraProviderFuture.get()
 
-            cameraProviderFuture.addListener({
-                try {
-                    // Used to bind the lifecycle of cameras to the lifecycle owner
-                    val cameraProvider: ProcessCameraProvider = cameraProviderFuture.get()
-                    val preview: Preview = Preview.Builder().apply {
-                        setTargetAspectRatio(AspectRatio.RATIO_16_9)
-                        setCameraSelector(currentLensFacing)
-                    }.build()
-                    preview.setSurfaceProvider(cameraPreview.surfaceProvider)
-                    cameraPreview.scaleType = PreviewView.ScaleType.FIT_CENTER
-                    try {
-                        // Unbind use cases before rebinding
-                        cameraProvider.unbindAll()
-
-                        // Bind use cases to camera
-                        cameraDevice = cameraProvider.bindToLifecycle(
-                            lifecycleOwner,
-                            currentLensFacing,
-                            preview,
-                            imageCapture,
-                            videoCapture
-                        )
-
-                        isInitialized = true
-                        onInitialize.invoke(true)
-                    } catch (exc: Exception) {
-                        onInitialize.invoke(false)
-                    }
-                } catch (e: Exception) {
-                    e.printStackTrace()
+            // Preview
+            preview = Preview.Builder()
+                .build( )
+                .also {
+                    it.setSurfaceProvider(cameraPreview.surfaceProvider)
                 }
-            }, ContextCompat.getMainExecutor(context))
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+            val recorder = Recorder.Builder()
+                .setQualitySelector(QualitySelector.from(videoQuality))
+                .build()
+            videoCapture =  VideoCapture.Builder(recorder).setMirrorMode(MIRROR_MODE_ON_FRONT_ONLY).build()
+//            videoCapture = VideoCapture.Builder(recorder).setMirrorMode(MIRROR_MODE_ON_FRONT_ONLY).build()
+
+            // Select back camera as a default
+            val cameraSelector = currentLensFacing
+
+            try {
+                // Unbind use cases before rebinding
+                cameraProvider.unbindAll()
+
+                // Bind use cases to camera
+                cameraProvider.bindToLifecycle(lifecycleOwner, cameraSelector, preview, videoCapture)
+
+            } catch (exc: Exception) {
+                Log.e(TAG, "Use case binding failed", exc)
+            }
+
+        }, ContextCompat.getMainExecutor(this.context))
     }
 
     /**
      * To stop camera preview and capture
      */
-    @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
     fun stopCamera(onStop: (result: Boolean?) -> Unit) {
         // if (isInitialized) {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context.applicationContext)
@@ -101,6 +110,103 @@ class CameraViewController(
             onStop.invoke(false)
         }
         //   }
+    }
+    fun changeCamera(onCameraChange: (result: Boolean?) -> Unit) {
+        // if (isInitialized) {
+
+        try {
+            currentLensFacing = if(currentLensFacing == CameraSelector.DEFAULT_BACK_CAMERA){
+                CameraSelector.DEFAULT_FRONT_CAMERA
+            }else{
+                CameraSelector.DEFAULT_BACK_CAMERA
+            }
+            onCameraChange.invoke(true)
+        } catch (e: Exception) {
+            throw(Exception("Camera can't change. Exception is: $e"))
+
+        }
+        //   }
+    }
+      fun captureVideo(fileName:String, filePath:String)
+    {
+        val videoCapture = this.videoCapture ?: return
+        val curRecording = recording
+        if (curRecording != null) {
+            return
+        }
+        // create and start a new recording session
+        val name = fileName
+        videoFilePath=filePath
+        val contentValues = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+            put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
+            if (Build.VERSION.SDK_INT > Build.VERSION_CODES.P) {
+                put(MediaStore.Video.Media.RELATIVE_PATH, videoFilePath)
+            }
+        }
+
+        val mediaStoreOutputOptions = MediaStoreOutputOptions
+            .Builder(this.context.contentResolver, MediaStore.Video.Media.EXTERNAL_CONTENT_URI)
+            .setContentValues(contentValues)
+
+            .build()
+
+        recording = videoCapture.output
+            .prepareRecording(this.context, mediaStoreOutputOptions)
+            .apply {
+                if (PermissionChecker.checkSelfPermission(
+                          context,
+                        android.Manifest.permission.RECORD_AUDIO
+                    ) ==
+                    PermissionChecker.PERMISSION_GRANTED
+                ) {
+                    withAudioEnabled()
+                }
+            }
+            .start(ContextCompat.getMainExecutor(this.context)) { recordEvent ->
+                //lambda event listener
+                when (recordEvent) {
+                    is VideoRecordEvent.Start -> {
+
+                    }
+                    is VideoRecordEvent.Finalize -> {
+                        Log.e("ABCDD", "finalizeVideo: "+ recordEvent.outputResults.outputUri.toString())
+                        if (!recordEvent.hasError()) {
+                            val msg =
+                                "Video capture succeeded: " + "${recordEvent.outputResults.outputUri}"
+                            Log.d(TAG, msg)
+                        } else {
+                            recording?.close()
+                            recording = null
+                            Log.e(TAG, "Video capture ends with error: " + "${recordEvent.error}")
+                        }
+                    }
+                }
+            }
+    }
+     fun stopVideoRecording():String{
+        val curRecording = recording
+        if (curRecording != null) {
+            curRecording.stop()
+            recording = null
+            return videoFilePath
+        }
+         else{
+             throw Exception("Currently video recording is not active")
+        }
+    }
+    fun changeCamera(){
+        currentLensFacing = if(currentLensFacing == CameraSelector.DEFAULT_BACK_CAMERA){
+            CameraSelector.DEFAULT_FRONT_CAMERA
+        }else{
+            CameraSelector.DEFAULT_BACK_CAMERA
+        }
+        val curRecording = recording
+        if (curRecording != null) {
+            curRecording.stop()
+            recording = null
+        }
+        startCamera(null)
     }
 
 

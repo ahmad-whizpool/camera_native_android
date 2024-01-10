@@ -1,4 +1,7 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -78,61 +81,79 @@ class _CameraPageState extends State<CameraPage> {
       body: Stack(
         children: [
           // THE CAMERA NATIVE VIEW
-          AndroidView(
-            viewType: viewType,
-            layoutDirection: TextDirection.ltr,
-            creationParams: creationParams,
-            creationParamsCodec: const StandardMessageCodec(),
+          PlatformViewLink(
+            viewType: 'plugins.endigo.io/pdfview',
+            surfaceFactory: (
+              BuildContext context,
+              PlatformViewController controller,
+            ) {
+              return AndroidViewSurface(
+                controller: controller as AndroidViewController,
+                gestureRecognizers: const <Factory<
+                    OneSequenceGestureRecognizer>>{},
+                hitTestBehavior: PlatformViewHitTestBehavior.opaque,
+              );
+            },
+            onCreatePlatformView: (PlatformViewCreationParams params) {
+              return PlatformViewsService.initSurfaceAndroidView(
+                id: params.id,
+                viewType: viewType,
+                layoutDirection: TextDirection.rtl,
+                creationParams: creationParams,
+                creationParamsCodec: const StandardMessageCodec(),
+              )
+                ..addOnPlatformViewCreatedListener(params.onPlatformViewCreated)
+                ..addOnPlatformViewCreatedListener((int id) {})
+                ..create();
+            },
           ),
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Column(
-                children: [
-                  Row(
-                    children: const [
-                      Icon(
-                        Icons.clear,
-                        color: Colors.white,
-                        size: 30,
-                      ),
-                      Spacer(),
-                      Icon(
-                        Icons.flip_camera_android,
-                        color: Colors.white,
-                        size: 30,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  const Align(
-                    alignment: Alignment.topRight,
-                    child: Icon(
-                      Icons.flash_off,
+          const Padding(
+            padding: EdgeInsets.all(8.0),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.clear,
                       color: Colors.white,
                       size: 30,
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                  const Align(
-                    alignment: Alignment.topRight,
-                    child: Icon(
-                      Icons.timer,
+                    Spacer(),
+                    Icon(
+                      Icons.flip_camera_android,
                       color: Colors.white,
                       size: 30,
                     ),
+                  ],
+                ),
+                SizedBox(height: 20),
+                Align(
+                  alignment: Alignment.topRight,
+                  child: Icon(
+                    Icons.flash_off,
+                    color: Colors.white,
+                    size: 30,
                   ),
-                  const Spacer(),
-                  const Center(
-                    child: Icon(
-                      Icons.circle_outlined,
-                      size: 80,
-                      color: Colors.white,
-                    ),
+                ),
+                SizedBox(height: 20),
+                Align(
+                  alignment: Alignment.topRight,
+                  child: Icon(
+                    Icons.timer,
+                    color: Colors.white,
+                    size: 30,
                   ),
-                  const SizedBox(height: 20),
-                ],
-              ),
+                ),
+                Spacer(),
+                Center(
+                  child: Icon(
+                    Icons.circle_outlined,
+                    size: 80,
+                    color: Colors.white,
+                  ),
+                ),
+                SizedBox(height: 20),
+              ],
             ),
           )
         ],
