@@ -10,7 +10,7 @@ class CameraManager {
     fun handle(call: MethodCall, result: MethodChannel.Result, controller: CameraViewController) {
         when {
             call.method.equals("startCamera") -> {
-                controller.startCamera()
+                controller.startCamera(call.argument<Int>("quality"))
                 result.success(true)
 
             }

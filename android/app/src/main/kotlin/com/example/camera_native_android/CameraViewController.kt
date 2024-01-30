@@ -47,7 +47,6 @@ class CameraViewController(
     lateinit var preview: Preview
     @SuppressLint("RestrictedApi")
     fun startCamera(quality:Int?) {
-
         if(quality !=null){
         videoQuality = when (quality) {
             1 -> Quality.LOWEST
@@ -127,18 +126,19 @@ class CameraViewController(
         }
         //   }
     }
-      fun captureVideo(fileName:String, filePath:String)
-    {
+    fun captureVideo(fileName: String, filePath: String) {
         val videoCapture = this.videoCapture ?: return
         val curRecording = recording
         if (curRecording != null) {
+            // A recording is already in progress
             return
         }
+
         // create and start a new recording session
-        val name = fileName
-        videoFilePath=filePath
+        videoFilePath = filePath
+
         val contentValues = ContentValues().apply {
-            put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+            put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
             put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
             if (Build.VERSION.SDK_INT > Build.VERSION_CODES.P) {
                 put(MediaStore.Video.Media.RELATIVE_PATH, videoFilePath)
@@ -146,44 +146,41 @@ class CameraViewController(
         }
 
         val mediaStoreOutputOptions = MediaStoreOutputOptions
-            .Builder(this.context.contentResolver, MediaStore.Video.Media.EXTERNAL_CONTENT_URI)
-            .setContentValues(contentValues)
-
-            .build()
+                .Builder(this.context.contentResolver, MediaStore.Video.Media.EXTERNAL_CONTENT_URI)
+                .setContentValues(contentValues)
+                .build()
 
         recording = videoCapture.output
-            .prepareRecording(this.context, mediaStoreOutputOptions)
-            .apply {
-                if (PermissionChecker.checkSelfPermission(
-                          context,
-                        android.Manifest.permission.RECORD_AUDIO
-                    ) ==
-                    PermissionChecker.PERMISSION_GRANTED
-                ) {
-                    withAudioEnabled()
-                }
-            }
-            .start(ContextCompat.getMainExecutor(this.context)) { recordEvent ->
-                //lambda event listener
-                when (recordEvent) {
-                    is VideoRecordEvent.Start -> {
-
+                .prepareRecording(this.context, mediaStoreOutputOptions)
+                .apply {
+                    if (PermissionChecker.checkSelfPermission(
+                                    context,
+                                    android.Manifest.permission.RECORD_AUDIO
+                            ) == PermissionChecker.PERMISSION_GRANTED
+                    ) {
+                        withAudioEnabled()
                     }
-                    is VideoRecordEvent.Finalize -> {
-                        Log.e("ABCDD", "finalizeVideo: "+ recordEvent.outputResults.outputUri.toString())
-                        if (!recordEvent.hasError()) {
-                            val msg =
-                                "Video capture succeeded: " + "${recordEvent.outputResults.outputUri}"
-                            Log.d(TAG, msg)
-                        } else {
-                            recording?.close()
-                            recording = null
-                            Log.e(TAG, "Video capture ends with error: " + "${recordEvent.error}")
+                }
+                .start(ContextCompat.getMainExecutor(this.context)) { recordEvent ->
+                    // lambda event listener
+                    when (recordEvent) {
+                        is VideoRecordEvent.Start -> {
+                            Log.d(TAG, "Video recording started")
+                        }
+                        is VideoRecordEvent.Finalize -> {
+                            Log.d(TAG, "Video recording finalize event received")
+                            if (!recordEvent.hasError()) {
+                                Log.d(TAG, "Video capture succeeded: ${recordEvent.outputResults.outputUri}")
+                            } else {
+                                recording?.close()
+                                recording = null
+                                Log.e(TAG, "Video capture ends with error: ${recordEvent.error}")
+                            }
                         }
                     }
                 }
-            }
     }
+
      fun stopVideoRecording():String{
         val curRecording = recording
         if (curRecording != null) {

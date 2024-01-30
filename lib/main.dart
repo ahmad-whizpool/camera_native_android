@@ -3,6 +3,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 void main() {
@@ -36,11 +37,14 @@ class _CameraPageState extends State<CameraPage> {
     var status = await Permission.camera.status;
     if (status.isGranted) {
       try {
-        bool success = await cameraChannel.invokeMethod("startSession");
+        bool success =
+            await cameraChannel.invokeMethod("startCamera", {"quality": 6});
         if (success && mounted) {
           setState(() {});
         }
-      } catch (e) {}
+      } catch (e) {
+        debugPrint(e.toString());
+      }
     } else if (status.isDenied) {
       var status = await Permission.camera.request();
       if (status.isGranted) {
@@ -56,6 +60,44 @@ class _CameraPageState extends State<CameraPage> {
         setState(() {});
       }
     } catch (e) {}
+  }
+
+  Future<void> changeCamera() async {
+    try {
+      bool success = await cameraChannel.invokeMethod("changeCamera");
+      if (success && mounted) {
+        setState(() {});
+      }
+    } catch (e) {}
+  }
+
+  bool isVideoRecording = false;
+  Future<void> startVideoRecording() async {
+    try {
+      final filePath = await getExternalStorageDirectory();
+      cameraChannel.invokeMethod("startVideoRecording", {
+        "fileName": "SampleVideo",
+        "filePath": filePath?.path ?? "/storage/emulated/0",
+      });
+
+    } catch (e) {
+      debugPrint(e.toString());
+    }
+    setState(() {
+      isVideoRecording = true;
+    });
+  }
+
+  Future<void> stopVideoRecording() async {
+    try {
+      bool success = await cameraChannel.invokeMethod("stopVideoRecording");
+      if (success && mounted) {}
+    } catch (e) {
+      debugPrint(e.toString());
+    }
+    setState(() {
+      isVideoRecording = false;
+    });
   }
 
   @override
@@ -107,53 +149,63 @@ class _CameraPageState extends State<CameraPage> {
                 ..create();
             },
           ),
-          const Padding(
-            padding: EdgeInsets.all(8.0),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      Icons.clear,
+          SafeArea(
+            child: Padding(
+              padding: EdgeInsets.all(8.0),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.clear,
+                        color: Colors.white,
+                        size: 30,
+                      ),
+                      Spacer(),
+                      GestureDetector(
+                        onTap: changeCamera,
+                        child: Icon(
+                          Icons.flip_camera_android,
+                          color: Colors.white,
+                          size: 30,
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 20),
+                  Align(
+                    alignment: Alignment.topRight,
+                    child: Icon(
+                      Icons.flash_off,
                       color: Colors.white,
                       size: 30,
                     ),
-                    Spacer(),
-                    Icon(
-                      Icons.flip_camera_android,
+                  ),
+                  SizedBox(height: 20),
+                  Align(
+                    alignment: Alignment.topRight,
+                    child: Icon(
+                      Icons.timer,
                       color: Colors.white,
                       size: 30,
                     ),
-                  ],
-                ),
-                SizedBox(height: 20),
-                Align(
-                  alignment: Alignment.topRight,
-                  child: Icon(
-                    Icons.flash_off,
-                    color: Colors.white,
-                    size: 30,
                   ),
-                ),
-                SizedBox(height: 20),
-                Align(
-                  alignment: Alignment.topRight,
-                  child: Icon(
-                    Icons.timer,
-                    color: Colors.white,
-                    size: 30,
+                  Spacer(),
+                  Center(
+                    child: GestureDetector(
+                      onTap: isVideoRecording
+                          ? stopVideoRecording
+                          : startVideoRecording,
+                      child: Icon(
+                        Icons.circle_outlined,
+                        size: 80,
+                        color: Colors.white,
+                      ),
+                    ),
                   ),
-                ),
-                Spacer(),
-                Center(
-                  child: Icon(
-                    Icons.circle_outlined,
-                    size: 80,
-                    color: Colors.white,
-                  ),
-                ),
-                SizedBox(height: 20),
-              ],
+                  SizedBox(height: 20),
+                ],
+              ),
             ),
           )
         ],
